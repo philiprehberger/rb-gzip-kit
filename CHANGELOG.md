@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-28
+
+### Added
+
+- `GzipKit.compress(string, stats: true)` returns a hash with compression statistics (data, ratio, original_size, compressed_size)
+- `GzipKit.compressed?(data)` checks for gzip magic bytes to detect compressed data
+- Progress callbacks for `compress_file` and `decompress_file` via block argument
+- `GzipKit.concat(data_a, data_b)` concatenates two gzip-compressed strings per gzip spec
+- `GzipKit.inspect_header(data)` reads gzip header metadata without decompressing
+
 ## [0.1.1] - 2026-03-26
 
 ### Added
