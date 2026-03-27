@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "philiprehberger/gzip_kit"
+require 'philiprehberger/gzip_kit'
 
 RSpec.configure do |config|
   config.expect_with :rspec do |expectations|

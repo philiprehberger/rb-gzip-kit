@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-require "zlib"
-require "stringio"
-require_relative "gzip_kit/version"
+require 'zlib'
+require 'stringio'
+require_relative 'gzip_kit/version'
 
 module Philiprehberger
   module GzipKit
@@ -45,8 +45,8 @@ module Philiprehberger
     # @param level [Integer] compression level (Zlib::DEFAULT_COMPRESSION by default)
     # @return [void]
     def self.compress_file(src, dest, level: Zlib::DEFAULT_COMPRESSION)
-      File.open(src, "rb") do |io_in|
-        File.open(dest, "wb") do |io_out|
+      File.open(src, 'rb') do |io_in|
+        File.open(dest, 'wb') do |io_out|
           compress_stream(io_in, io_out, level: level)
         end
       end
@@ -58,8 +58,8 @@ module Philiprehberger
     # @param dest [String] path to the destination file
     # @return [void]
     def self.decompress_file(src, dest)
-      File.open(src, "rb") do |io_in|
-        File.open(dest, "wb") do |io_out|
+      File.open(src, 'rb') do |io_in|
+        File.open(dest, 'wb') do |io_out|
           decompress_stream(io_in, io_out)
         end
       end
