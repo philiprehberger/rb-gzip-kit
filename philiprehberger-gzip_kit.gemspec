@@ -9,7 +9,7 @@ Gem::Specification.new do |spec|
   spec.email = ['me@philiprehberger.com']
   spec.summary = 'Gzip compression and decompression with streaming support'
   spec.description = 'Simple API for gzip compression and decompression with support for strings, files, ' \
-                       'and IO streams. Configurable compression level. Built on Ruby stdlib zlib.'
+                     'and IO streams. Configurable compression level. Built on Ruby stdlib zlib.'
   spec.homepage = 'https://philiprehberger.com/open-source-packages/ruby/philiprehberger-gzip_kit'
   spec.license = 'MIT'
   spec.required_ruby_version = '>= 3.1.0'
