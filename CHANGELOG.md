@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-16
+
+### Added
+- `GzipKit.equivalent?(blob_a, blob_b)` — returns true iff both gzip-compressed inputs decompress to equal byte strings; raises `GzipKit::Error` if either input is not valid gzip
+
 ## [0.2.1] - 2026-03-31
 
 ### Changed

@@ -120,6 +120,20 @@ combined = Philiprehberger::GzipKit.concat(part_a, part_b)
 Philiprehberger::GzipKit.decompress(combined) # => "Hello, world!"
 ```
 
+### Equivalence Check
+
+Compare two gzip blobs by their decompressed payload — useful when the same source is recompressed at different levels or with different metadata:
+
+```ruby
+require "philiprehberger/gzip_kit"
+
+fast = Philiprehberger::GzipKit.compress("hello", level: Zlib::BEST_SPEED)
+best = Philiprehberger::GzipKit.compress("hello", level: Zlib::BEST_COMPRESSION)
+
+Philiprehberger::GzipKit.equivalent?(fast, best) # => true
+Philiprehberger::GzipKit.equivalent?(fast, Philiprehberger::GzipKit.compress("world")) # => false
+```
+
 ### Header Inspection
 
 ```ruby
@@ -141,6 +155,7 @@ header = Philiprehberger::GzipKit.inspect_header(gzip_data)
 | `GzipKit.compress_stream(io_in, io_out, level:)` | Streaming compression in 64KB chunks |
 | `GzipKit.decompress_stream(io_in, io_out)` | Streaming decompression in 64KB chunks |
 | `GzipKit.concat(data_a, data_b)` | Concatenate two gzip-compressed strings |
+| `GzipKit.equivalent?(blob_a, blob_b)` | Check whether two gzip blobs decompress to equal byte strings |
 | `GzipKit.inspect_header(data)` | Read gzip header metadata without decompressing |
 
 ## Development

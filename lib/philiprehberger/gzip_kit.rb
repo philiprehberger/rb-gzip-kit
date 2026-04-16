@@ -149,6 +149,24 @@ module Philiprehberger
       result
     end
 
+    # Check whether two gzip-compressed blobs decompress to equal byte strings.
+    #
+    # Useful for comparing gzip outputs produced at different compression levels
+    # or with different metadata — only the decompressed payloads are compared.
+    #
+    # @param blob_a [String] first gzip-compressed string
+    # @param blob_b [String] second gzip-compressed string
+    # @return [Boolean] true iff both blobs decompress to equal byte strings
+    # @raise [Error] if either input is not valid gzip
+    def self.equivalent?(blob_a, blob_b)
+      raise Error, 'first argument is not valid gzip data' unless compressed?(blob_a)
+      raise Error, 'second argument is not valid gzip data' unless compressed?(blob_b)
+
+      decompress(blob_a).b == decompress(blob_b).b
+    rescue Zlib::GzipFile::Error => e
+      raise Error, "failed to decompress gzip data: #{e.message}"
+    end
+
     # Inspect the gzip header without decompressing.
     #
     # @param data [String] gzip-compressed data
