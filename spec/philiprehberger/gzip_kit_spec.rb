@@ -454,6 +454,73 @@ RSpec.describe Philiprehberger::GzipKit do
     end
   end
 
+  describe '.equivalent?' do
+    it 'returns true for identical compressed bytes' do
+      blob = described_class.compress('hello, world!')
+
+      expect(described_class.equivalent?(blob, blob)).to be true
+    end
+
+    it 'returns true when the same source is compressed at different levels' do
+      source = 'abcdefghij' * 1_000
+      fast = described_class.compress(source, level: Zlib::BEST_SPEED)
+      best = described_class.compress(source, level: Zlib::BEST_COMPRESSION)
+
+      expect(described_class.equivalent?(fast, best)).to be true
+    end
+
+    it 'returns false for blobs with different payloads' do
+      a = described_class.compress('hello')
+      b = described_class.compress('world')
+
+      expect(described_class.equivalent?(a, b)).to be false
+    end
+
+    it 'returns true for two empty gzip streams' do
+      a = described_class.compress('')
+      b = described_class.compress('')
+
+      expect(described_class.equivalent?(a, b)).to be true
+    end
+
+    it 'returns false for empty vs non-empty payload' do
+      a = described_class.compress('')
+      b = described_class.compress('data')
+
+      expect(described_class.equivalent?(a, b)).to be false
+    end
+
+    it 'compares binary payloads byte-for-byte' do
+      payload = (0..255).map(&:chr).join.b
+      a = described_class.compress(payload)
+      b = described_class.compress(payload)
+
+      expect(described_class.equivalent?(a, b)).to be true
+    end
+
+    it 'raises when the first argument is not gzip' do
+      valid = described_class.compress('ok')
+
+      expect { described_class.equivalent?('not gzip', valid) }.to raise_error(
+        Philiprehberger::GzipKit::Error, 'first argument is not valid gzip data'
+      )
+    end
+
+    it 'raises when the second argument is not gzip' do
+      valid = described_class.compress('ok')
+
+      expect { described_class.equivalent?(valid, 'not gzip') }.to raise_error(
+        Philiprehberger::GzipKit::Error, 'second argument is not valid gzip data'
+      )
+    end
+
+    it 'raises when both arguments are not gzip' do
+      expect { described_class.equivalent?('bad', 'data') }.to raise_error(
+        Philiprehberger::GzipKit::Error
+      )
+    end
+  end
+
   describe '.inspect_header' do
     it 'returns header info for valid gzip data' do
       compressed = described_class.compress('Hello')
