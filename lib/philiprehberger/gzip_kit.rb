@@ -5,6 +5,22 @@ require 'stringio'
 require_relative 'gzip_kit/version'
 
 module Philiprehberger
+  # GzipKit provides gzip compression and decompression with streaming support.
+  #
+  # The module exposes both string-oriented and IO-oriented entry points:
+  #
+  # - {GzipKit.compress} / {GzipKit.decompress} for in-memory string data
+  # - {GzipKit.compress_stream} / {GzipKit.decompress_stream} for IO-to-IO streaming
+  # - {GzipKit.compress_file} / {GzipKit.decompress_file} for file-to-file transforms
+  # - {GzipKit.compressed?} / {GzipKit.inspect_header} for gzip detection and header inspection
+  # - {GzipKit.concat} / {GzipKit.equivalent?} for combining and comparing gzip blobs
+  #
+  # Streaming and file methods read in 64 KB chunks by default. The chunk size can be
+  # tuned via the +chunk_size:+ keyword when dealing with very small or very large payloads.
+  #
+  # @example Compress and decompress a string
+  #   compressed = Philiprehberger::GzipKit.compress('hello')
+  #   Philiprehberger::GzipKit.decompress(compressed) # => "hello"
   module GzipKit
     class Error < StandardError; end
 
@@ -17,6 +33,14 @@ module Philiprehberger
     # @param level [Integer] compression level (Zlib::DEFAULT_COMPRESSION by default)
     # @param stats [Boolean] when true, return a hash with compression statistics
     # @return [String, Hash] gzip-compressed bytes, or a stats hash when stats: true
+    #
+    # @example Compress a string
+    #   Philiprehberger::GzipKit.compress('hello, world!')
+    #   # => "\x1F\x8B\b\x00..." (binary gzip bytes)
+    #
+    # @example Compress with stats
+    #   Philiprehberger::GzipKit.compress('a' * 10_000, stats: true)
+    #   # => { data: "...", ratio: 0.99, original_size: 10000, compressed_size: 41 }
     def self.compress(string, level: Zlib::DEFAULT_COMPRESSION, stats: false)
       io_out = StringIO.new
       io_out.binmode
@@ -43,9 +67,19 @@ module Philiprehberger
     # Decompress gzip bytes to a string.
     #
     # @param data [String] gzip-compressed bytes
-    # @return [String] decompressed string
+    # @param stats [Boolean] when true, return a hash with decompression statistics
+    # @return [String, Hash] decompressed string, or a stats hash when stats: true
     # @raise [Zlib::GzipFile::Error] if the data is not valid gzip
-    def self.decompress(data)
+    #
+    # @example Decompress gzip bytes
+    #   compressed = Philiprehberger::GzipKit.compress('hello')
+    #   Philiprehberger::GzipKit.decompress(compressed) # => "hello"
+    #
+    # @example Decompress with stats
+    #   compressed = Philiprehberger::GzipKit.compress('a' * 10_000)
+    #   Philiprehberger::GzipKit.decompress(compressed, stats: true)
+    #   # => { data: "aaaa...", ratio: 0.0041 }
+    def self.decompress(data, stats: false)
       io_in = StringIO.new(data)
       io_in.binmode
       result = String.new(encoding: Encoding::BINARY)
@@ -62,7 +96,16 @@ module Philiprehberger
         end
       end
 
-      result.force_encoding(Encoding::UTF_8)
+      decompressed = result.force_encoding(Encoding::UTF_8)
+
+      if stats
+        decompressed_size = decompressed.bytesize
+        compressed_size = data.bytesize
+        ratio = decompressed_size.zero? ? 0.0 : compressed_size.to_f / decompressed_size
+        { data: decompressed, ratio: ratio }
+      else
+        decompressed
+      end
     end
 
     # Check if data is gzip-compressed by inspecting magic bytes.
@@ -81,25 +124,29 @@ module Philiprehberger
     # @param src [String] path to the source file
     # @param dest [String] path to the destination gzip file
     # @param level [Integer] compression level (Zlib::DEFAULT_COMPRESSION by default)
+    # @param chunk_size [Integer] bytes per read chunk (defaults to 64 KB)
     # @yield [bytes_processed, total_bytes] progress callback
     # @yieldparam bytes_processed [Integer] bytes processed so far
     # @yieldparam total_bytes [Integer] total file size
     # @return [void]
-    def self.compress_file(src, dest, level: Zlib::DEFAULT_COMPRESSION, &block)
+    # @raise [ArgumentError] if chunk_size is not a positive Integer
+    def self.compress_file(src, dest, level: Zlib::DEFAULT_COMPRESSION, chunk_size: CHUNK_SIZE, &block)
+      validate_chunk_size!(chunk_size)
+
       File.open(src, 'rb') do |io_in|
         File.open(dest, 'wb') do |io_out|
           if block
             total_bytes = File.size(src)
             bytes_processed = 0
             gz = Zlib::GzipWriter.new(io_out, level)
-            while (chunk = io_in.read(CHUNK_SIZE))
+            while (chunk = io_in.read(chunk_size))
               gz.write(chunk)
               bytes_processed += chunk.bytesize
               block.call(bytes_processed, total_bytes)
             end
             gz.finish
           else
-            compress_stream(io_in, io_out, level: level)
+            compress_stream(io_in, io_out, level: level, chunk_size: chunk_size)
           end
         end
       end
@@ -109,24 +156,28 @@ module Philiprehberger
     #
     # @param src [String] path to the gzip source file
     # @param dest [String] path to the destination file
+    # @param chunk_size [Integer] bytes per read chunk (defaults to 64 KB)
     # @yield [bytes_processed, total_bytes] progress callback
     # @yieldparam bytes_processed [Integer] bytes decompressed so far
     # @yieldparam total_bytes [nil] always nil (total unknown until decompression completes)
     # @return [void]
-    def self.decompress_file(src, dest, &block)
+    # @raise [ArgumentError] if chunk_size is not a positive Integer
+    def self.decompress_file(src, dest, chunk_size: CHUNK_SIZE, &block)
+      validate_chunk_size!(chunk_size)
+
       File.open(src, 'rb') do |io_in|
         File.open(dest, 'wb') do |io_out|
           if block
             gz = Zlib::GzipReader.new(io_in)
             bytes_processed = 0
-            while (chunk = gz.read(CHUNK_SIZE))
+            while (chunk = gz.read(chunk_size))
               io_out.write(chunk)
               bytes_processed += chunk.bytesize
               block.call(bytes_processed, nil)
             end
             gz.close
           else
-            decompress_stream(io_in, io_out)
+            decompress_stream(io_in, io_out, chunk_size: chunk_size)
           end
         end
       end
@@ -191,32 +242,65 @@ module Philiprehberger
       gz&.close
     end
 
-    # Streaming compression from one IO to another, reading in 64KB chunks.
+    # Streaming compression from one IO to another.
     #
     # @param io_in [IO] readable input stream
     # @param io_out [IO] writable output stream
     # @param level [Integer] compression level (Zlib::DEFAULT_COMPRESSION by default)
+    # @param chunk_size [Integer] bytes per read chunk (defaults to 64 KB)
     # @return [void]
-    def self.compress_stream(io_in, io_out, level: Zlib::DEFAULT_COMPRESSION)
+    # @raise [ArgumentError] if chunk_size is not a positive Integer
+    #
+    # @example Compress from one IO to another
+    #   File.open('input.txt', 'rb') do |io_in|
+    #     File.open('output.gz', 'wb') do |io_out|
+    #       Philiprehberger::GzipKit.compress_stream(io_in, io_out)
+    #     end
+    #   end
+    #
+    # @example Tune the chunk size for small payloads
+    #   Philiprehberger::GzipKit.compress_stream(io_in, io_out, chunk_size: 4 * 1024)
+    def self.compress_stream(io_in, io_out, level: Zlib::DEFAULT_COMPRESSION, chunk_size: CHUNK_SIZE)
+      validate_chunk_size!(chunk_size)
+
       gz = Zlib::GzipWriter.new(io_out, level)
-      while (chunk = io_in.read(CHUNK_SIZE))
+      while (chunk = io_in.read(chunk_size))
         gz.write(chunk)
       end
       gz.finish
     end
 
-    # Streaming decompression from one IO to another, reading in 64KB chunks.
+    # Streaming decompression from one IO to another.
     #
     # @param io_in [IO] readable input stream containing gzip data
     # @param io_out [IO] writable output stream
+    # @param chunk_size [Integer] bytes per read chunk (defaults to 64 KB)
     # @return [void]
-    def self.decompress_stream(io_in, io_out)
+    # @raise [ArgumentError] if chunk_size is not a positive Integer
+    #
+    # @example Decompress from one IO to another
+    #   File.open('output.gz', 'rb') do |io_in|
+    #     File.open('restored.txt', 'wb') do |io_out|
+    #       Philiprehberger::GzipKit.decompress_stream(io_in, io_out)
+    #     end
+    #   end
+    def self.decompress_stream(io_in, io_out, chunk_size: CHUNK_SIZE)
+      validate_chunk_size!(chunk_size)
+
       gz = Zlib::GzipReader.new(io_in)
-      while (chunk = gz.read(CHUNK_SIZE))
+      while (chunk = gz.read(chunk_size))
         io_out.write(chunk)
       end
     ensure
       gz&.close
     end
+
+    # @api private
+    def self.validate_chunk_size!(chunk_size)
+      return if chunk_size.is_a?(Integer) && chunk_size.positive?
+
+      raise ArgumentError, "chunk_size must be a positive Integer, got: #{chunk_size.inspect}"
+    end
+    private_class_method :validate_chunk_size!
   end
 end

@@ -667,4 +667,131 @@ RSpec.describe Philiprehberger::GzipKit do
       expect(decompressed_io.string).to eq('')
     end
   end
+
+  describe 'chunk_size keyword' do
+    it 'roundtrips via streams with a small chunk size on a longer input' do
+      original = ('abcdefghij' * 2_000).dup # 20,000 bytes — well above 256 byte chunk
+      compressed_io = StringIO.new
+      compressed_io.binmode
+      described_class.compress_stream(StringIO.new(original), compressed_io, chunk_size: 256)
+
+      compressed_io.rewind
+      decompressed_io = StringIO.new
+      decompressed_io.binmode
+      described_class.decompress_stream(compressed_io, decompressed_io, chunk_size: 256)
+
+      expect(decompressed_io.string).to eq(original)
+    end
+
+    it 'roundtrips via files with a small chunk size' do
+      Dir.mktmpdir do |dir|
+        src = File.join(dir, 'input.txt')
+        compressed = File.join(dir, 'input.txt.gz')
+        output = File.join(dir, 'output.txt')
+
+        content = ('chunked content line.' * 1_500)
+        File.write(src, content)
+
+        described_class.compress_file(src, compressed, chunk_size: 256)
+        described_class.decompress_file(compressed, output, chunk_size: 256)
+
+        expect(File.read(output)).to eq(content)
+      end
+    end
+
+    it 'raises ArgumentError when chunk_size is zero on compress_stream' do
+      expect do
+        described_class.compress_stream(StringIO.new('data'), StringIO.new, chunk_size: 0)
+      end.to raise_error(ArgumentError, /chunk_size must be a positive Integer/)
+    end
+
+    it 'raises ArgumentError when chunk_size is negative on decompress_stream' do
+      expect do
+        described_class.decompress_stream(StringIO.new, StringIO.new, chunk_size: -1)
+      end.to raise_error(ArgumentError, /chunk_size must be a positive Integer/)
+    end
+
+    it 'raises ArgumentError when chunk_size is zero on compress_file' do
+      Dir.mktmpdir do |dir|
+        src = File.join(dir, 'input.txt')
+        File.write(src, 'data')
+
+        expect do
+          described_class.compress_file(src, File.join(dir, 'out.gz'), chunk_size: 0)
+        end.to raise_error(ArgumentError, /chunk_size must be a positive Integer/)
+      end
+    end
+
+    it 'raises ArgumentError when chunk_size is negative on decompress_file' do
+      Dir.mktmpdir do |dir|
+        src = File.join(dir, 'input.txt')
+        compressed = File.join(dir, 'input.txt.gz')
+        File.write(src, 'data')
+        described_class.compress_file(src, compressed)
+
+        expect do
+          described_class.decompress_file(compressed, File.join(dir, 'out.txt'), chunk_size: -10)
+        end.to raise_error(ArgumentError, /chunk_size must be a positive Integer/)
+      end
+    end
+
+    it 'raises ArgumentError when chunk_size is not an Integer' do
+      expect do
+        described_class.compress_stream(StringIO.new('data'), StringIO.new, chunk_size: 1024.5)
+      end.to raise_error(ArgumentError, /chunk_size must be a positive Integer/)
+    end
+  end
+
+  describe '.decompress with stats' do
+    it 'returns a string when stats is false' do
+      compressed = described_class.compress('Hello')
+      result = described_class.decompress(compressed, stats: false)
+
+      expect(result).to be_a(String)
+      expect(result).to eq('Hello')
+    end
+
+    it 'returns a string when stats is not provided' do
+      compressed = described_class.compress('Hello')
+      result = described_class.decompress(compressed)
+
+      expect(result).to be_a(String)
+      expect(result).to eq('Hello')
+    end
+
+    it 'returns a hash with data and ratio when stats is true' do
+      original = 'a' * 10_000
+      compressed = described_class.compress(original)
+      result = described_class.decompress(compressed, stats: true)
+
+      expect(result).to be_a(Hash)
+      expect(result).to have_key(:data)
+      expect(result).to have_key(:ratio)
+      expect(result[:data]).to eq(original)
+    end
+
+    it 'calculates ratio as compressed_size / decompressed_size' do
+      original = 'a' * 10_000
+      compressed = described_class.compress(original)
+      result = described_class.decompress(compressed, stats: true)
+      expected_ratio = compressed.bytesize.to_f / original.bytesize
+
+      expect(result[:ratio]).to be_within(0.0001).of(expected_ratio)
+    end
+
+    it 'returns ratio of 0.0 for empty decompressed output' do
+      compressed = described_class.compress('')
+      result = described_class.decompress(compressed, stats: true)
+
+      expect(result[:data]).to eq('')
+      expect(result[:ratio]).to eq(0.0)
+    end
+
+    it 'reports a ratio greater than zero for non-empty input' do
+      compressed = described_class.compress('hello, world!')
+      result = described_class.decompress(compressed, stats: true)
+
+      expect(result[:ratio]).to be > 0
+    end
+  end
 end

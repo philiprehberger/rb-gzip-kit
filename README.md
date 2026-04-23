@@ -108,6 +108,41 @@ File.open("output.gz", "rb") do |input|
 end
 ```
 
+### Custom chunk size
+
+Streaming and file methods read in 64 KB chunks by default. Override with `chunk_size:` to tune for memory constraints or throughput:
+
+```ruby
+require "philiprehberger/gzip_kit"
+
+# Smaller chunks for memory-constrained environments
+File.open("input.txt", "rb") do |input|
+  File.open("output.gz", "wb") do |output|
+    Philiprehberger::GzipKit.compress_stream(input, output, chunk_size: 4 * 1024)
+  end
+end
+
+# Larger chunks for bulk throughput
+Philiprehberger::GzipKit.compress_file("input.bin", "output.gz", chunk_size: 1 * 1024 * 1024)
+Philiprehberger::GzipKit.decompress_file("output.gz", "restored.bin", chunk_size: 1 * 1024 * 1024)
+```
+
+`chunk_size:` must be a positive `Integer`; any other value raises `ArgumentError`.
+
+### Decompress with stats
+
+Mirror of `compress(..., stats: true)` — returns a hash with the decompressed payload and the compressed-to-decompressed size ratio:
+
+```ruby
+require "philiprehberger/gzip_kit"
+
+compressed = Philiprehberger::GzipKit.compress("a" * 10_000)
+result = Philiprehberger::GzipKit.decompress(compressed, stats: true)
+# => { data: "aaaa...", ratio: 0.0041 }
+```
+
+The ratio is `compressed_size / decompressed_size` (inverse of compression ratio). For zero-length output, ratio is `0.0`.
+
 ### Stream Concatenation
 
 ```ruby
@@ -148,12 +183,12 @@ header = Philiprehberger::GzipKit.inspect_header(gzip_data)
 | Method | Description |
 |--------|-------------|
 | `GzipKit.compress(string, level:, stats:)` | Compress a string to gzip bytes; returns stats hash when `stats: true` |
-| `GzipKit.decompress(data)` | Decompress gzip bytes to a string |
+| `GzipKit.decompress(data, stats:)` | Decompress gzip bytes to a string; returns `{ data:, ratio: }` when `stats: true` |
 | `GzipKit.compressed?(data)` | Check if data is gzip-compressed via magic bytes |
-| `GzipKit.compress_file(src, dest, level:, &block)` | Compress a file to a gzip file with optional progress callback |
-| `GzipKit.decompress_file(src, dest, &block)` | Decompress a gzip file with optional progress callback |
-| `GzipKit.compress_stream(io_in, io_out, level:)` | Streaming compression in 64KB chunks |
-| `GzipKit.decompress_stream(io_in, io_out)` | Streaming decompression in 64KB chunks |
+| `GzipKit.compress_file(src, dest, level:, chunk_size:, &block)` | Compress a file to a gzip file with optional progress callback and chunk size |
+| `GzipKit.decompress_file(src, dest, chunk_size:, &block)` | Decompress a gzip file with optional progress callback and chunk size |
+| `GzipKit.compress_stream(io_in, io_out, level:, chunk_size:)` | Streaming compression (64 KB chunks by default) |
+| `GzipKit.decompress_stream(io_in, io_out, chunk_size:)` | Streaming decompression (64 KB chunks by default) |
 | `GzipKit.concat(data_a, data_b)` | Concatenate two gzip-compressed strings |
 | `GzipKit.equivalent?(blob_a, blob_b)` | Check whether two gzip blobs decompress to equal byte strings |
 | `GzipKit.inspect_header(data)` | Read gzip header metadata without decompressing |

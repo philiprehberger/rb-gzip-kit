@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-23
+
+### Added
+- Optional `chunk_size:` keyword on `compress_stream`, `decompress_stream`, `compress_file`, `decompress_file` (defaults to 64 KB).
+- Optional `stats:` keyword on `decompress` — returns `{ data:, ratio: }` when true.
+- Module-level YARD overview and `@example` blocks on primary methods.
+
 ## [0.3.0] - 2026-04-16
 
 ### Added
